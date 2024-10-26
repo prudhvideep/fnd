@@ -57,8 +57,8 @@ With support for various environments, fnd ensures you can quickly find what you
 		}
 
 		if configFlag {
-      creds,err := config.GetSshCredentials()
-			if err != nil{
+			creds, err := config.GetSshCredentials()
+			if err != nil {
 				log.Fatal(err)
 			}
 
@@ -67,15 +67,13 @@ With support for various environments, fnd ensures you can quickly find what you
 			return
 		}
 
-		remoteFlag,err := cmd.Flags().GetBool("remote")
-		if err != nil{
+		remoteFlag, err := cmd.Flags().GetBool("remote")
+		if err != nil {
 			log.Fatal(err)
 			os.Exit(1)
 		}
 
-		if remoteFlag {
-			fmt.Println(remoteFlag)
-		}
+		// fmt.Println("Remote Flag ----> ", remoteFlag)
 
 		typeFlag, err := cmd.Flags().GetString("type")
 		if err != nil {
@@ -86,7 +84,12 @@ With support for various environments, fnd ensures you can quickly find what you
 		if err != nil {
 			os.Exit(1)
 		}
-		search.Find(args, typeFlag, dirFlag)
+		if remoteFlag {
+			search.RemoteSearch(args, typeFlag, dirFlag, profile)
+		} else {
+			search.Find(args, typeFlag, dirFlag)
+		}
+
 		fmt.Println(time.Since(t))
 	},
 }
@@ -100,9 +103,9 @@ func Execute() {
 
 func init() {
 	config.CreateConfigFile()
-	profile,_ = config.InitDefaultProfile()
-	
-	fmt.Println("Default Profile ----> ",profile)
+	profile, _ = config.InitDefaultProfile()
+
+	// fmt.Println("Default Profile ----> ", profile)
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
