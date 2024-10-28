@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-
-	"github.com/fatih/color"
 )
+
+func RgbColor(text string, r, g, b int) string {
+	return fmt.Sprintf("\033[38;2;%d;%d;%dm%s\033[0m", r, g, b, text)
+}
 
 func FormatOutput(path string, d fs.DirEntry) {
 	_, err := d.Info()
@@ -15,19 +17,10 @@ func FormatOutput(path string, d fs.DirEntry) {
 		return
 	}
 
-	txtColor := color.New(color.FgRed).SprintFunc()
-	goColor := color.New(color.FgGreen).SprintFunc()
-	defaultColor := color.New(color.FgHiCyan).SprintFunc()
-	dirColor := color.New(color.FgHiBlue).SprintFunc()
-	dirColorLight :=  color.New(color.FgBlue).SprintFunc()
-	mdColor := color.New(color.FgYellow).SprintFunc()
-	modColor := color.New(color.FgRed, color.FgHiYellow).SprintFunc()
-	csvColor := color.New(color.FgRed).SprintFunc()
-
 	filename := filepath.Base(path)
 
 	if d.IsDir() {
-		fmt.Println(dirColor(path))
+		fmt.Printf("%s \n", RgbColor(path, 86, 299, 245))
 		return
 	}
 
@@ -35,18 +28,26 @@ func FormatOutput(path string, d fs.DirEntry) {
 	var coloredFilename string
 	switch ext {
 	case ".txt":
-		coloredFilename = txtColor(filename)
+		coloredFilename = RgbColor(filename, 245, 85, 64)
 	case ".go":
-		coloredFilename = goColor(filename)
+		coloredFilename = RgbColor(filename, 48, 242, 58)
 	case ".md":
-		coloredFilename = mdColor(filename)
+		coloredFilename = RgbColor(filename, 255, 165, 0)
 	case ".mod":
-		coloredFilename = modColor(filename)
+		coloredFilename = RgbColor(filename, 235, 137, 101)
 	case ".csv":
-		coloredFilename = csvColor(filename)
+		coloredFilename = RgbColor(filename, 245, 85, 64)
+	case ".py":
+		coloredFilename = RgbColor(filename, 48, 242, 58)
+	case ".java":
+		coloredFilename = RgbColor(filename, 48, 242, 58)
 	default:
-		coloredFilename = defaultColor(filename)
+		coloredFilename = RgbColor(filename, 241, 245, 122)
 	}
 
-	fmt.Printf("%s/%s \n", dirColorLight(filepath.Dir(path)), coloredFilename)
+	if filepath.Dir(path) == "." {
+		fmt.Printf("%s \n", coloredFilename)
+	}else{
+		fmt.Printf("%s/%s \n", RgbColor(filepath.Dir(path), 86, 299, 245), coloredFilename)
+	}
 }

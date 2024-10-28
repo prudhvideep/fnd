@@ -22,10 +22,8 @@ THE SOFTWARE.
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/prudhvideep/fnd/pkg/search"
 
@@ -49,7 +47,7 @@ Usage examples:
 
 With support for various environments, fnd ensures you can quickly find what you're looking for, no matter where it's located.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		t := time.Now()
+		// t := time.Now()
 		configFlag, err := cmd.Flags().GetBool("configure")
 		if err != nil {
 			log.Fatal(err)
@@ -73,8 +71,6 @@ With support for various environments, fnd ensures you can quickly find what you
 			os.Exit(1)
 		}
 
-		// fmt.Println("Remote Flag ----> ", remoteFlag)
-
 		typeFlag, err := cmd.Flags().GetString("type")
 		if err != nil {
 			log.Fatal(err)
@@ -90,7 +86,7 @@ With support for various environments, fnd ensures you can quickly find what you
 			search.Find(args, typeFlag, dirFlag)
 		}
 
-		fmt.Println(time.Since(t))
+		// fmt.Println(time.Since(t))
 	},
 }
 

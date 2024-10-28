@@ -121,7 +121,9 @@ func fetchAll(args []string, directory string) {
 	}
 
 	if directory == "" {
+
 		directory = "."
+
 	}
 
 	for i := 0; i < workers; i++ {
@@ -130,7 +132,7 @@ func fetchAll(args []string, directory string) {
 		go func() {
 			defer wg.Done()
 			for pmsg := range pathChannel {
-				format.FormatOutput(pmsg.path,pmsg.d)
+				format.FormatOutput(pmsg.path, pmsg.d)
 			}
 		}()
 	}
@@ -140,7 +142,7 @@ func fetchAll(args []string, directory string) {
 			return nil
 		}
 
-		if filepath.Base(path)[0] == '.' {
+		if filepath.Base(path)[0] == '.' || (path[0] == '.') {
 			return nil
 		}
 
@@ -151,10 +153,19 @@ func fetchAll(args []string, directory string) {
 			if err != nil {
 				return err
 			}
-			match = re.MatchString(d.Name())
+			if d.IsDir() {
+				match = re.MatchString(path)
+			} else {
+				match = re.MatchString(d.Name())
+			}
 		} else {
 			var e error
-			match, e = filepath.Match(pattern, d.Name())
+			if d.IsDir() {
+				match, e = filepath.Match(pattern, path)
+			} else {
+				match, e = filepath.Match(pattern, d.Name())
+			}
+
 			if e != nil {
 				return e
 			}
@@ -209,7 +220,7 @@ func fetchDir(args []string, directory string) {
 			defer wg.Done()
 
 			for path := range pathChannel {
-				fmt.Println(path)
+				fmt.Printf("%s \n", format.RgbColor(path, 86, 299, 245))
 			}
 		}()
 	}
@@ -219,7 +230,7 @@ func fetchDir(args []string, directory string) {
 			return nil
 		}
 
-		if filepath.Base(path)[0] == '.' {
+		if filepath.Base(path)[0] == '.' || path[0] == '.' {
 			return nil
 		}
 
@@ -231,10 +242,10 @@ func fetchDir(args []string, directory string) {
 				if err != nil {
 					return err
 				}
-				match = re.MatchString(d.Name())
+				match = re.MatchString(filepath.Base(path))
 			} else {
 				var e error
-				match, e = filepath.Match(pattern, d.Name())
+				match, e = filepath.Match(pattern, filepath.Base(path))
 				if e != nil {
 					return e
 				}
@@ -247,7 +258,9 @@ func fetchDir(args []string, directory string) {
 		return nil
 	})
 
-	wg.Done()
+	close(pathChannel)
+
+	wg.Wait()
 
 	if err != nil {
 		fmt.Println("Error walking the directory:", err)
@@ -295,7 +308,7 @@ func fetchFiles(args []string, directory string) {
 			return nil
 		}
 
-		if filepath.Base(path)[0] == '.' {
+		if filepath.Base(path)[0] == '.' || path[0] == '.' {
 			return nil
 		}
 

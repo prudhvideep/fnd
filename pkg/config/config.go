@@ -5,11 +5,11 @@ package config
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/fatih/color"
 	"gopkg.in/yaml.v2"
 )
 
@@ -75,7 +75,7 @@ func CreateConfigFile() error {
 
 func GetSshCredentials() (*Credentials, error) {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Profile name [********me]: ")
+	color.RGB(255, 128, 0).Print("Profile name [********me]: ")
 	profile, err := reader.ReadString('\n')
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func GetSshCredentials() (*Credentials, error) {
 	}
 
 	var host string
-	fmt.Print("Host [********me]: ")
+	color.RGB(255, 128, 0).Print("Host [********me]: ")
 	host, err = reader.ReadString('\n')
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func GetSshCredentials() (*Credentials, error) {
 	host = strings.TrimSpace(host)
 
 	var user string
-	fmt.Print("User [********me]: ")
+	color.RGB(255, 128, 0).Print("User [********me]: ")
 	user, err = reader.ReadString('\n')
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func GetSshCredentials() (*Credentials, error) {
 	user = strings.TrimSpace(user)
 
 	var port string
-	fmt.Print("Port [********me]: ")
+	color.RGB(255, 128, 0).Print("Port [********me]: ")
 	port, err = reader.ReadString('\n')
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func GetSshCredentials() (*Credentials, error) {
 	}
 
 	var keyPath string
-	fmt.Print("Key Path [********me]: ")
+	color.RGB(255, 128, 0).Print("Key Path [********me]: ")
 	keyPath, err = reader.ReadString('\n')
 	if err != nil {
 		return nil, err
@@ -171,8 +171,6 @@ func UpdateConfig(credentials *Credentials) error {
 	if err = encoder.Encode(config); err != nil {
 		return err
 	}
-
-	fmt.Println("Config Successfully Updated")
-
+	color.RGB(255, 128, 0).Print("Config Successfully Updated")
 	return nil
 }
