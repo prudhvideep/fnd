@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔍 fnd
+# fnd
 
 </div>
 
@@ -8,7 +8,7 @@
 
 ---
 
-## 🚀 Features
+## Features
 
 - **Simple, intuitive syntax**: Search effortlessly with `regex` or `glob` patterns.
 - **Local & remote search**: Go beyond the local file system to locate files on remote servers.
