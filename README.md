@@ -15,7 +15,7 @@
 ## Usage
 
 <div align="center">
-  <img src="./doc/fnd_demo.gif" width="500" alt="Demo GIF">
+  <img src="./doc/fnd_demo.gif" width="1000" height="auto" alt="Demo GIF">
 </div>
 
 
