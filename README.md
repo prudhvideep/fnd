@@ -15,10 +15,9 @@
 ## Usage
 
 <div align="center">
-  <video width="500" controls>
-    <source src="./doc/fnd_demo.mp4" type="video/mp4">
-  </video>
+  <img src="./doc/fnd_demo.gif" width="500" alt="Demo GIF">
 </div>
+
 
 
 ## Installation
