@@ -26,7 +26,7 @@ To install `fnd`, clone the repository and build the project. Ensure Go is insta
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/fnd
+git clone https://github.com/prudhvideep/fnd
 
 # Navigate to the directory
 cd fnd
