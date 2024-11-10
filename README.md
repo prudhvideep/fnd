@@ -12,10 +12,10 @@
 - **Local & remote search**: Go beyond the local file system to locate files on remote servers.
 - **Flexible pattern support**: Supports both `regex` and `glob` styles for versatile searching.
 
-## Usage
+## Demo
 
 <div align="center">
-  <img src="./doc/output.gif" width="1000" height="auto" alt="Demo GIF">
+  <img src="./doc/demo.gif" width="1000" height="auto" alt="Demo GIF">
 </div>
 
 
