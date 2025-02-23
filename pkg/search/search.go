@@ -1,335 +1,172 @@
 package search
 
 import (
-	"bytes"
 	"fmt"
-	"io/fs"
+	"log"
+	"os"
 	"path/filepath"
-	"regexp"
+	"runtime"
+	"strings"
 	"sync"
+	"syscall"
 
-	"github.com/prudhvideep/fnd/pkg/config"
-	format "github.com/prudhvideep/fnd/pkg/format"
-	mySsh "github.com/prudhvideep/fnd/pkg/ssh"
-	ssh "golang.org/x/crypto/ssh"
+	"github.com/spf13/cobra"
+	regexp "github.com/wasilibs/go-re2"
 )
 
-type PrintMessage struct {
-	path string
-	d    fs.DirEntry
+const (
+	SearchNormal = iota
+	SearchDir
+	SearchFile
+)
+
+const (
+	CAPACITY = 1000
+)
+
+type Entry struct {
+	Path  string
+	Name  string
+	IsDir bool
 }
 
-func RemoteSearch(args []string, typeFlag string, directory string, credntials *config.Credentials) error {
-	fmt.Println("Inside the Remote Search")
+func (e *Entry) IsHidden() bool {
+	entryName := e.Name
 
-	var pattern string
-
-	if len(args) == 0 {
-		pattern = "*"
+	if strings.HasPrefix(entryName, ".") {
+		return true
 	}
 
-	if len(args) > 0 {
-		pattern = args[0]
-
-		if _, err := regexp.Compile(pattern); err != nil {
-			pattern = "*" + pattern + "*"
+	if runtime.GOOS == "windows" {
+		pointer, err := syscall.UTF16PtrFromString(entryName)
+		if err != nil {
+			return false
 		}
+		attributes, err := syscall.GetFileAttributes(pointer)
+		if err != nil {
+			return false
+		}
+
+		return attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
 	}
 
-	client, err := mySsh.InitializeConnection(credntials)
-	if err != nil {
-		return err
-	}
-
-	output, err := RunFindCommand(client, pattern, directory)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(output)
-
-	return nil
+	return false
 }
 
-func RunFindCommand(client *ssh.Client, pattern, directory string) (string, error) {
-	session, err := client.NewSession()
-	if err != nil {
-		return "", err
-	}
-	defer session.Close()
-
-	var cmd string
-	if pattern == "" {
-		pattern = "*"
-	}
-	if directory == "" {
-		directory = "."
-	}
-
-	cmd = fmt.Sprintf("find %s -name '%s'", directory, pattern)
-
-	var stdout, stderr bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
-
-	err = session.Run(cmd)
-	if err != nil {
-		return stderr.String(), err
-	}
-
-	// err = session.Run("echo $home")
-	// if err != nil{
-	// 	return stderr.String(), err
-	// }
-
-	// fmt.Println(stdout.String())
-
-	return stdout.String(), nil
-}
-
-func Find(args []string, typeFlag string, directory string) {
-	switch typeFlag {
-	case "d":
-		fetchDir(args, directory)
+func getSearchType(searchType string) int {
+	switch searchType {
 	case "f":
-		fetchFiles(args, directory)
+		return SearchFile
+	case "d":
+		return SearchDir
 	default:
-		fetchAll(args, directory)
+		return SearchNormal
 	}
 }
 
-func fetchAll(args []string, directory string) {
-
-	var pattern string
-	var isRegExp bool
-	const workers = 10
-	var wg sync.WaitGroup
-	pathChannel := make(chan PrintMessage)
-
-	if len(args) == 0 {
-		pattern = "*"
+//This method contains the main logic that performs parallel directory traversal
+func Find(c *cobra.Command, args []string) {
+	if len(args) > 2 {
+		log.Fatal("Only two arguments are allowed")
 	}
 
-	if len(args) > 0 {
-		pattern = args[0]
-
-		if _, err := regexp.Compile(pattern); err == nil {
-			isRegExp = true
-		} else {
-			pattern = "*" + pattern + "*"
-		}
-	}
-
-	if directory == "" {
-		directory = "."
-	}
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			for pmsg := range pathChannel {
-				format.FormatOutput(pmsg.path,pmsg.d)
-			}
-		}()
-	}
-
-	err := filepath.WalkDir(directory, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if filepath.Base(path)[0] == '.' {
-			return nil
-		}
-
-		var match bool
-
-		if isRegExp {
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				return err
-			}
-			match = re.MatchString(d.Name())
-		} else {
-			var e error
-			match, e = filepath.Match(pattern, d.Name())
-			if e != nil {
-				return e
-			}
-		}
-
-		if match {
-			pathChannel <- PrintMessage{
-				path: path,
-				d:    d,
-			}
-		}
-		return nil
-	})
-
-	close(pathChannel)
-
-	wg.Wait()
-
+	rootDir, err := os.Getwd()
 	if err != nil {
-		fmt.Println("Error walking the directory:", err)
+		log.Fatal("Error reading the parent dir")
+	}
+
+	if len(args) == 2 {
+		reqSearchDir := args[1]
+		rootDir = filepath.Join(rootDir, reqSearchDir)
+	}
+
+	pattern := ".*"
+	if len(args) >= 1 {
+		pattern = args[0]
+	}
+
+	//Get Search Type
+	//Valid values - Normal Search, Only Fil
+	typeFlag, err := c.PersistentFlags().GetString("type")
+	if err != nil {
+		log.Fatal("Error reading the type flag")
+	}
+
+	searchType := getSearchType(typeFlag)
+
+	exp, err := regexp.Compile(pattern)
+	if err != nil {
+		log.Fatal("Invalid regex pattern")
+	}
+
+	entryChan := make(chan Entry, CAPACITY)
+	resultChan := make(chan Entry, CAPACITY)
+	var wg sync.WaitGroup
+
+	workers := runtime.NumCPU() * 2
+	wg.Add(workers)
+	for i := 1; i <= workers; i++ {
+		go ProcessEntries(entryChan, resultChan, pattern, exp, searchType, &wg)
+	}
+
+	go func() {
+		Walk(rootDir, entryChan)
+		close(entryChan)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	for {
+		res, ok := <-resultChan
+		if !ok {
+			return
+		}
+
+		cleanRoot := filepath.Clean(rootDir)
+		cleanRes := filepath.Clean(res.Path)
+		relPath, err := filepath.Rel(cleanRoot, cleanRes)
+		if err != nil {
+			fmt.Println("Error:", err)
+			continue
+		}
+		fmt.Println(relPath)
 	}
 }
 
-func fetchDir(args []string, directory string) {
-	var pattern string
-	var isRegExp bool
-	var wg sync.WaitGroup
-	const workers = 10
-	pathChannel := make(chan string)
-
-	if len(args) == 0 {
-		pattern = "*"
-	}
-
-	if len(args) > 0 {
-		pattern = args[0]
-
-		if _, err := regexp.Compile(pattern); err == nil {
-			isRegExp = true
-		} else {
-			pattern = "*" + pattern + "*"
-		}
-	}
-
-	if directory == "" {
-		directory = "."
-	}
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for path := range pathChannel {
-				fmt.Println(path)
-			}
-		}()
-	}
-
-	err := filepath.WalkDir(directory, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if filepath.Base(path)[0] == '.' {
-			return nil
-		}
-
-		var match bool
-
-		if d.IsDir() {
-			if isRegExp {
-				re, err := regexp.Compile(pattern)
-				if err != nil {
-					return err
-				}
-				match = re.MatchString(d.Name())
-			} else {
-				var e error
-				match, e = filepath.Match(pattern, d.Name())
-				if e != nil {
-					return e
-				}
-			}
-
-			if match {
-				pathChannel <- path
-			}
-		}
-		return nil
-	})
-
-	wg.Done()
-
+func Walk(root string, entryChan chan<- Entry) {
+	entries, err := os.ReadDir(root)
 	if err != nil {
-		fmt.Println("Error walking the directory:", err)
+		return
+	}
+
+	for _, entry := range entries {
+
+		if entry.Name()[0] == '.' {
+			continue
+		}
+
+		entryChan <- Entry{Name: entry.Name(), Path: filepath.Join(root, entry.Name()), IsDir: entry.IsDir()}
+
+		if entry.IsDir() {
+			Walk(filepath.Join(root, entry.Name()), entryChan)
+		}
 	}
 }
 
-func fetchFiles(args []string, directory string) {
-	var pattern string
-	var isRegExp bool
-	var wg sync.WaitGroup
-	const workers = 10
-	pathChannel := make(chan PrintMessage)
+func ProcessEntries(entryChan <-chan Entry, resultChan chan<- Entry, pattern string, exp *regexp.Regexp, searchType int, wg *sync.WaitGroup) {
 
-	if len(args) == 0 {
-		pattern = "*"
-	}
+	defer wg.Done()
 
-	if len(args) > 0 {
-		pattern = args[0]
+	for entry := range entryChan {
 
-		if _, err := regexp.Compile(pattern); err == nil {
-			isRegExp = true
-		} else {
-			pattern = "*" + pattern + "*"
-		}
-	}
-
-	if directory == "" {
-		directory = "."
-	}
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			for pmsg := range pathChannel {
-				format.FormatOutput(pmsg.path, pmsg.d)
-			}
-		}()
-	}
-
-	err := filepath.WalkDir(directory, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if filepath.Base(path)[0] == '.' {
-			return nil
-		}
-
-		var match bool
-
-		if !d.IsDir() {
-			if isRegExp {
-				re, err := regexp.Compile(pattern)
-				if err != nil {
-					return err
-				}
-				match = re.MatchString(d.Name())
-			} else {
-				var e error
-				match, e = filepath.Match(pattern, d.Name())
-				if e != nil {
-					return e
-				}
-			}
-
-			if match {
-				pathChannel <- PrintMessage{
-					path: path,
-					d:    d,
-				}
+		if searchType == SearchNormal || (searchType == SearchDir && entry.IsDir) || (searchType == SearchFile && !entry.IsDir) {
+			if exp.MatchString(entry.Name) {
+				resultChan <- entry
 			}
 		}
-		return nil
-	})
-
-	close(pathChannel)
-	wg.Wait()
-
-	if err != nil {
-		fmt.Println("Error walking the directory:", err)
 	}
+
 }

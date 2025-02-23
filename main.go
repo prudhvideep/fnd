@@ -24,6 +24,6 @@ package main
 import "github.com/prudhvideep/fnd/cmd"
 
 func main() {
+	
 	cmd.Execute()
-
 }
