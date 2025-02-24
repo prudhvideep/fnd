@@ -53,8 +53,8 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	
-	rootCmd.PersistentFlags().StringP("ext","e","","Use this flag to mention the file extension")
+
+	rootCmd.PersistentFlags().StringP("ext", "e", "", "Use this flag to mention the file extension")
 	rootCmd.PersistentFlags().StringP("type", "t", "", "Use this flag to mention the type")
 	rootCmd.PersistentFlags().StringP("dir", "d", "", "Use this flag to specify the directory")
 	rootCmd.PersistentFlags().BoolP("remote", "r", false, "Use this flag to specify remote execution.")

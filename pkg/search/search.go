@@ -2,14 +2,15 @@ package search
 
 import (
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
-	"syscall"
 
+	"github.com/charlievieth/fastwalk"
+	format "github.com/prudhvideep/fnd/pkg/format"
 	"github.com/spf13/cobra"
 	regexp "github.com/wasilibs/go-re2"
 )
@@ -30,29 +31,6 @@ type Entry struct {
 	IsDir bool
 }
 
-func (e *Entry) IsHidden() bool {
-	entryName := e.Name
-
-	if strings.HasPrefix(entryName, ".") {
-		return true
-	}
-
-	if runtime.GOOS == "windows" {
-		pointer, err := syscall.UTF16PtrFromString(entryName)
-		if err != nil {
-			return false
-		}
-		attributes, err := syscall.GetFileAttributes(pointer)
-		if err != nil {
-			return false
-		}
-
-		return attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
-	}
-
-	return false
-}
-
 func getSearchType(searchType string) int {
 	switch searchType {
 	case "f":
@@ -64,7 +42,17 @@ func getSearchType(searchType string) int {
 	}
 }
 
-//This method contains the main logic that performs parallel directory traversal
+func IsHidden(path string) bool {
+	parts := strings.Split(filepath.Clean(path), string(os.PathSeparator))
+	for _, part := range parts {
+		if part[0] == '.' {
+			return true
+		}
+	}
+	return false
+}
+
+// This method contains the main logic that performs parallel directory traversal
 func Find(c *cobra.Command, args []string) {
 	if len(args) > 2 {
 		log.Fatal("Only two arguments are allowed")
@@ -85,88 +73,64 @@ func Find(c *cobra.Command, args []string) {
 		pattern = args[0]
 	}
 
-	//Get Search Type
-	//Valid values - Normal Search, Only Fil
-	typeFlag, err := c.PersistentFlags().GetString("type")
+	// Get Search Type
+	// Valid values - Normal Search, Only Fil
+	searchTypeFlag, err := c.PersistentFlags().GetString("type")
 	if err != nil {
 		log.Fatal("Error reading the type flag")
 	}
 
-	searchType := getSearchType(typeFlag)
+	searchType := getSearchType(searchTypeFlag)
 
-	exp, err := regexp.Compile(pattern)
+	//Get extension type
+	extType, err := c.PersistentFlags().GetString("ext")
+	if err != nil {
+		log.Fatal("Error reading the file extension type flag")
+	}
+
+	exp, err := regexp.Compile("(?i)" + pattern)
 	if err != nil {
 		log.Fatal("Invalid regex pattern")
 	}
 
-	entryChan := make(chan Entry, CAPACITY)
-	resultChan := make(chan Entry, CAPACITY)
-	var wg sync.WaitGroup
-
-	workers := runtime.NumCPU() * 2
-	wg.Add(workers)
-	for i := 1; i <= workers; i++ {
-		go ProcessEntries(entryChan, resultChan, pattern, exp, searchType, &wg)
+	conf := fastwalk.Config{
+		Follow:     true,
+		NumWorkers: runtime.NumCPU(),
 	}
 
-	go func() {
-		Walk(rootDir, entryChan)
-		close(entryChan)
-	}()
-
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	for {
-		res, ok := <-resultChan
-		if !ok {
-			return
-		}
-
-		cleanRoot := filepath.Clean(rootDir)
-		cleanRes := filepath.Clean(res.Path)
-		relPath, err := filepath.Rel(cleanRoot, cleanRes)
+	walkFn := func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			fmt.Println("Error:", err)
-			continue
-		}
-		fmt.Println(relPath)
-	}
-}
-
-func Walk(root string, entryChan chan<- Entry) {
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-
-		if entry.Name()[0] == '.' {
-			continue
+			fmt.Fprintf(os.Stderr, "%s: %v\n", path, err)
+			return nil
 		}
 
-		entryChan <- Entry{Name: entry.Name(), Path: filepath.Join(root, entry.Name()), IsDir: entry.IsDir()}
-
-		if entry.IsDir() {
-			Walk(filepath.Join(root, entry.Name()), entryChan)
+		if IsHidden(path) {
+			return nil
 		}
-	}
-}
 
-func ProcessEntries(entryChan <-chan Entry, resultChan chan<- Entry, pattern string, exp *regexp.Regexp, searchType int, wg *sync.WaitGroup) {
+		if (searchType == SearchDir && !d.IsDir()) || (searchType == SearchFile && d.IsDir()) {
+			return nil
+		}
 
-	defer wg.Done()
+		filePrefix := strings.TrimPrefix(filepath.Ext(d.Name()), ".")
 
-	for entry := range entryChan {
+		if extType != "" && extType != filePrefix {
+			return nil
+		}
 
-		if searchType == SearchNormal || (searchType == SearchDir && entry.IsDir) || (searchType == SearchFile && !entry.IsDir) {
-			if exp.MatchString(entry.Name) {
-				resultChan <- entry
+		if pattern != "" && exp.MatchString(d.Name()) {
+			if relPath, err := filepath.Rel(rootDir, path); err == nil {
+				format.FormatOutput(relPath, d)
 			}
+
 		}
+
+		return err
+	}
+
+	if err := fastwalk.Walk(&conf, rootDir, walkFn); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", rootDir, err)
+		os.Exit(1)
 	}
 
 }
