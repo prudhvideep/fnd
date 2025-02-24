@@ -1,6 +1,6 @@
 module github.com/prudhvideep/fnd
 
-go 1.23.1
+go 1.23
 
 require (
 	github.com/charlievieth/fastwalk v1.0.9
